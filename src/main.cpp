@@ -1,4 +1,4 @@
-#include "secrets3.h"
+#include "secrets1.h"
 #include <Arduino.h>
 #include <WiFiClientSecure.h>
 #include <MQTTClient.h>
@@ -38,7 +38,6 @@ void blink(int id)
 	inBlink++;
 
 	uint16_t color = 0;
-
 	switch (id)
 	{
 		case 1:
@@ -54,21 +53,21 @@ void blink(int id)
 			color = matrix.Color(255, 0, 0);
 			break;
 	}
-
-	for (int i = 0; i <= 255; i+=4)
+	
+	for (int i = 0; i <= 255; i++)
 	{
-		Serial.println("Raise: " + String(i));
 		matrix.fill(color);
 		matrix.setBrightness(i);
 		matrix.show();
+		delay(2);
 	}
 
-	for (int i = 255; i >= 0; i-=4)
+	for (int i = 255; i >= 0; i--)
 	{
-		Serial.println("Lower: " + String(i)); 
 		matrix.fill(color);
 		matrix.setBrightness(i);
 		matrix.show();
+		delay(2);
 	}
 
 	matrix.fill();
@@ -86,11 +85,14 @@ void messageHandler(String &topic, String &payload) {
 	
 	if (id != ID)
 	{
-		blink(id);
+		for (int i = 0; i < 3; i++)
+		{
+			blink(id);
+		}
 	}
 }
 
-void connectAWS()
+void connectWiFi()
 {
 	WiFi.mode(WIFI_STA);
 	WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -109,7 +111,10 @@ void connectAWS()
   	net.setCACert(AWS_CERT_CA);
   	net.setCertificate(AWS_CERT_CRT);
   	net.setPrivateKey(AWS_CERT_PRIVATE);
+}
 
+void connectAWS()
+{
   	// Connect to the MQTT broker on the AWS endpoint we defined earlier
   	client.begin(AWS_IOT_ENDPOINT, 8883, net);
 
@@ -152,6 +157,7 @@ void setup() {
   	Serial.begin(9600);
 	delay(10);
 
+	connectWiFi();
   	connectAWS();
 
 	pinMode(BUTTON_PIN, INPUT);
@@ -161,12 +167,23 @@ void setup() {
 }
 
 void loop() {
+	if (WiFi.status() != WL_CONNECTED)
+	{
+		Serial.println("WiFi disconnected");
+		connectWiFi();
+	}
+
+  	if (!client.connected()){
+		Serial.println("AWS IOT disconnected");
+    	connectAWS();
+  	}
+
 	int buttonState = digitalRead(BUTTON_PIN);
 	if (buttonState == HIGH) {
 		publishMessage();
 		blink(ID);
 	}
-	
+
   	client.loop();
 
 	if (inBlink == 0) 
