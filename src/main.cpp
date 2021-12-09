@@ -1,4 +1,4 @@
-#include "secrets1.h"
+#include "secrets2.h"
 #include <Arduino.h>
 #include <WiFiClientSecure.h>
 #include <MQTTClient.h>
@@ -54,7 +54,7 @@ void blink(int id)
 			break;
 	}
 	
-	for (int i = 0; i <= 255; i++)
+	for (int i = 0; i <= 255; i+=10)
 	{
 		matrix.fill(color);
 		matrix.setBrightness(i);
@@ -67,7 +67,7 @@ void blink(int id)
 		matrix.fill(color);
 		matrix.setBrightness(i);
 		matrix.show();
-		delay(2);
+		delay(4);
 	}
 
 	matrix.fill();
@@ -85,7 +85,7 @@ void messageHandler(String &topic, String &payload) {
 	
 	if (id != ID)
 	{
-		for (int i = 0; i < 3; i++)
+		for (int i = 0; i < 1; i++)
 		{
 			blink(id);
 		}
