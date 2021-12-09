@@ -7,6 +7,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_NeoMatrix.h>
 #include <Adafruit_NeoPixel.h>
+#include <Preferences.h>
 
 // Button
 #define BUTTON_PIN 16
@@ -20,6 +21,8 @@
 // The MQTT topics that this device should publish/subscribe
 #define AWS_IOT_PUBLISH_TOPIC   "esp32/pub"
 #define AWS_IOT_SUBSCRIBE_TOPIC "esp32/sub"
+
+Preferences preferences;
 
 WiFiClientSecure net = WiFiClientSecure();
 MQTTClient client = MQTTClient(256);
@@ -76,33 +79,45 @@ void blink(int id)
 	inBlink--;
 }
 
-void messageHandler(String &topic, String &payload) {
-  	Serial.println("incoming: " + topic + " - " + payload);
-
-	StaticJsonDocument<200> doc;
-	deserializeJson(doc, payload);
-	const int id = doc["id"];
-	
-	if (id != ID)
-	{
-		for (int i = 0; i < 1; i++)
-		{
-			blink(id);
-		}
-	}
-}
-
 void connectWiFi()
 {
 	WiFi.mode(WIFI_STA);
-	WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
-	Serial.print("Connecting to " + String(WIFI_SSID));
+	preferences.begin("credentials", false);
+	String ssid = preferences.getString("ssid", "");
+	String password = preferences.getString("password", "");
 
-  	while (WiFi.status() != WL_CONNECTED){
+	if (ssid == "" || password == "")
+	{
+		Serial.println("Using default credentials");
+		WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+		Serial.print("Connecting to " + String(WIFI_SSID));
+	}
+	else
+	{
+		Serial.println("Using saved credentials");
+		Serial.println("SSID: " + ssid);
+		Serial.println("Password: " + password);
+		WiFi.begin(ssid.c_str(), password.c_str());
+		Serial.print("Connecting to " + ssid);
+		
+	}
+
+	preferences.end();
+
+	int retries = 0;
+  	while (WiFi.status() != WL_CONNECTED && retries < 20) {
     	delay(500);
     	Serial.print(".");
+		retries++;
   	}
+
+	if (retries == 20)
+	{
+		Serial.println("Using default credentials");
+		WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+		Serial.print("Connecting to " + String(WIFI_SSID));
+	}
 
 	Serial.println();
 	Serial.println("Connected");
@@ -111,6 +126,43 @@ void connectWiFi()
   	net.setCACert(AWS_CERT_CA);
   	net.setCertificate(AWS_CERT_CRT);
   	net.setPrivateKey(AWS_CERT_PRIVATE);
+}
+
+void messageHandler(String &topic, String &payload) {
+  	Serial.println("incoming: " + topic + " - " + payload);
+
+	StaticJsonDocument<200> doc;
+	deserializeJson(doc, payload);
+
+	if (doc.containsKey("ssid") && doc.containsKey("password"))
+	{
+		const String ssid = doc["ssid"];
+		const String password = doc["password"];
+
+		preferences.begin("credentials", false);
+		preferences.putString("ssid", ssid);
+		preferences.putString("password", password);
+
+		Serial.println("Saved new credentials");
+		Serial.println("SSID: " + ssid);
+		Serial.println("Password: " + password);
+
+		preferences.end();
+
+		connectWiFi();
+	}
+
+	if (doc.containsKey("id"))
+	{
+		int id = doc["id"];
+		if (id != ID)
+		{
+			for (int i = 0; i < 1; i++)
+			{
+				blink(id);
+			}
+		}
+	}
 }
 
 void connectAWS()
