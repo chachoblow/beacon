@@ -1,4 +1,4 @@
-#include "secrets2.h"
+#include "secrets1.h"
 #include <Arduino.h>
 #include <WiFiClientSecure.h>
 #include <MQTTClient.h>
@@ -7,23 +7,17 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_NeoMatrix.h>
 #include <Adafruit_NeoPixel.h>
-#include <Preferences.h>
+#include <WiFiManager.h>
 
-// Button
 #define BUTTON_PIN 16
-
-// Matrix
 #define MATRIX_PIN 23
-
-// Potentiometer
 #define POT_PIN 36
 
 // The MQTT topics that this device should publish/subscribe
 #define AWS_IOT_PUBLISH_TOPIC   "esp32/pub"
 #define AWS_IOT_SUBSCRIBE_TOPIC "esp32/sub"
 
-Preferences preferences;
-
+WiFiManager wiFiManager;
 WiFiClientSecure net = WiFiClientSecure();
 MQTTClient client = MQTTClient(256);
 
@@ -55,6 +49,9 @@ void blink(int id)
 		case 4:
 			color = matrix.Color(255, 0, 0);
 			break;
+		default:
+			color = matrix.Color(255, 255, 255);
+			break;   
 	}
 	
 	for (int i = 0; i <= 255; i+=10)
@@ -81,51 +78,16 @@ void blink(int id)
 
 void connectWiFi()
 {
-	WiFi.mode(WIFI_STA);
-
-	preferences.begin("credentials", false);
-	String ssid = preferences.getString("ssid", "");
-	String password = preferences.getString("password", "");
-
-	if (ssid == "" || password == "")
-	{
-		Serial.println("Using default credentials");
-		WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-		Serial.print("Connecting to " + String(WIFI_SSID));
-	}
-	else
-	{
-		Serial.println("Using saved credentials");
-		Serial.println("SSID: " + ssid);
-		Serial.println("Password: " + password);
-		WiFi.begin(ssid.c_str(), password.c_str());
-		Serial.print("Connecting to " + ssid);
-		
-	}
-
-	preferences.end();
-
-	int retries = 0;
-  	while (WiFi.status() != WL_CONNECTED && retries < 20) {
-    	delay(500);
-    	Serial.print(".");
-		retries++;
-  	}
-
-	if (retries == 20)
-	{
-		Serial.println("Using default credentials");
-		WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-		Serial.print("Connecting to " + String(WIFI_SSID));
-	}
-
-	Serial.println();
-	Serial.println("Connected");
+	wiFiManager.erase();
+	wiFiManager.autoConnect("AutoConnectAP", "roosterChicken");
+	wiFiManager.setWiFiAutoReconnect(true);
+	Serial.println("Connected to " + wiFiManager.getWiFiSSID());
 
   	// Configure WiFiClientSecure to use the AWS IoT device credentials
   	net.setCACert(AWS_CERT_CA);
   	net.setCertificate(AWS_CERT_CRT);
   	net.setPrivateKey(AWS_CERT_PRIVATE);
+	Serial.println("AWS IoT device credentials added");
 }
 
 void messageHandler(String &topic, String &payload) {
@@ -134,33 +96,12 @@ void messageHandler(String &topic, String &payload) {
 	StaticJsonDocument<200> doc;
 	deserializeJson(doc, payload);
 
-	if (doc.containsKey("ssid") && doc.containsKey("password"))
-	{
-		const String ssid = doc["ssid"];
-		const String password = doc["password"];
-
-		preferences.begin("credentials", false);
-		preferences.putString("ssid", ssid);
-		preferences.putString("password", password);
-
-		Serial.println("Saved new credentials");
-		Serial.println("SSID: " + ssid);
-		Serial.println("Password: " + password);
-
-		preferences.end();
-
-		connectWiFi();
-	}
-
 	if (doc.containsKey("id"))
 	{
 		int id = doc["id"];
 		if (id != ID)
 		{
-			for (int i = 0; i < 1; i++)
-			{
-				blink(id);
-			}
+			blink(id);
 		}
 	}
 }
@@ -174,12 +115,10 @@ void connectAWS()
   	client.onMessage(messageHandler);
 
   	Serial.print("Connecting to AWS IOT");
-
   	while (!client.connect(THINGNAME)) {
     	Serial.print(".");
     	delay(100);
   	}
-
 	Serial.println();
 
   	if (!client.connected()){
@@ -189,7 +128,6 @@ void connectAWS()
 
   	// Subscribe to a topic
   	client.subscribe(AWS_IOT_SUBSCRIBE_TOPIC);
-
   	Serial.println("Connected");
 }
 
@@ -219,12 +157,6 @@ void setup() {
 }
 
 void loop() {
-	if (WiFi.status() != WL_CONNECTED)
-	{
-		Serial.println("WiFi disconnected");
-		connectWiFi();
-	}
-
   	if (!client.connected()){
 		Serial.println("AWS IOT disconnected");
     	connectAWS();

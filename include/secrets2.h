@@ -1,9 +1,9 @@
 #include <pgmspace.h>
 #include <color.h>
 
-#define THINGNAME "esp32_button_test_2"
-#define ID 2
-#define COLOR Yellow
+const char THINGNAME[] = "esp32_button_test_2";
+const Color COLOR = Yellow;
+const int ID = 2;
 
 const char WIFI_SSID[] = "DucksBeakTheBears";
 const char WIFI_PASSWORD[] = "ChampKlein90";
