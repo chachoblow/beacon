@@ -1,4 +1,4 @@
-#include "secrets1.h"
+#include "secrets2.h"
 #include <Arduino.h>
 #include <WiFiClientSecure.h>
 #include <MQTTClient.h>
@@ -8,14 +8,18 @@
 #include <Adafruit_NeoMatrix.h>
 #include <Adafruit_NeoPixel.h>
 #include <WiFiManager.h>
+#include <ESP32Encoder.h>
+#include <Preferences.h>
 
-#define BUTTON_PIN 16
+#define BUTTON_PIN 22
 #define MATRIX_PIN 23
 #define POT_PIN 36
 
 // The MQTT topics that this device should publish/subscribe
 #define AWS_IOT_PUBLISH_TOPIC   "esp32/pub"
 #define AWS_IOT_SUBSCRIBE_TOPIC "esp32/sub"
+
+Preferences preferences;
 
 WiFiManager wiFiManager;
 WiFiClientSecure net = WiFiClientSecure();
@@ -24,7 +28,10 @@ MQTTClient client = MQTTClient(256);
 Adafruit_NeoMatrix matrix = Adafruit_NeoMatrix(8, 8, MATRIX_PIN,
   NEO_MATRIX_TOP     + NEO_MATRIX_RIGHT +
   NEO_MATRIX_COLUMNS + NEO_MATRIX_PROGRESSIVE,
-  NEO_GRB            + NEO_KHZ800);
+  NEO_RGB            + NEO_KHZ800);
+
+ESP32Encoder encoder;
+long oldEncoderCount = 0;
 
 uint8_t brightness = 0;
 uint16_t defaultColor = matrix.Color(255, 255, 255);
@@ -70,7 +77,8 @@ void blink(int id)
 		delay(4);
 	}
 
-	matrix.fill();
+	matrix.setBrightness(brightness);
+	matrix.fill(defaultColor);
 	matrix.show();
 
 	inBlink--;
@@ -78,7 +86,6 @@ void blink(int id)
 
 void connectWiFi()
 {
-	wiFiManager.erase();
 	wiFiManager.autoConnect("AutoConnectAP", "roosterChicken");
 	wiFiManager.setWiFiAutoReconnect(true);
 	Serial.println("Connected to " + wiFiManager.getWiFiSSID());
@@ -147,12 +154,21 @@ void setup() {
   	Serial.begin(9600);
 	delay(10);
 
+	preferences.begin("light-box", false);
+	brightness = preferences.getLong("brightness", 1);
+	preferences.end();
+
 	connectWiFi();
   	connectAWS();
 
-	pinMode(BUTTON_PIN, INPUT);
+	pinMode(BUTTON_PIN, INPUT_PULLUP);
+	ESP32Encoder::useInternalWeakPullResistors=UP;
+	encoder.attachHalfQuad(12, 13);
+	oldEncoderCount = encoder.getCount();
 
 	matrix.begin();
+	matrix.setBrightness(brightness);
+	matrix.fill(defaultColor);
 	matrix.show();
 }
 
@@ -163,19 +179,39 @@ void loop() {
   	}
 
 	int buttonState = digitalRead(BUTTON_PIN);
-	if (buttonState == HIGH) {
+	if (buttonState == LOW) {
 		publishMessage();
 		blink(ID);
 	}
 
   	client.loop();
-
+	
 	if (inBlink == 0) 
 	{
-		int potValue = analogRead(POT_PIN);
-		brightness = map(potValue, 0, 4095, 0, 255);
-		matrix.setBrightness(brightness);
-		matrix.fill(defaultColor);
-		matrix.show();
+		long encoderCount = encoder.getCount();
+		boolean brightnessChanged = false;
+
+		if (encoderCount > oldEncoderCount && brightness < 255)
+		{
+			brightness++;
+			brightnessChanged = true;
+		}
+		else if (encoderCount < oldEncoderCount && brightness > 0)
+		{
+			brightness--;
+			brightnessChanged = true;
+		}
+
+		oldEncoderCount = encoderCount;
+
+		if (brightnessChanged)
+		{
+			preferences.begin("light-box", false);
+			preferences.putLong("brightness", brightness);
+			preferences.end();
+			matrix.setBrightness(brightness);
+			matrix.fill(defaultColor);
+			matrix.show();
+		}
 	}
 }
