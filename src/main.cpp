@@ -1,4 +1,4 @@
-#include "secrets2.h"
+#include "secrets1.h"
 #include <Arduino.h>
 #include <WiFiClientSecure.h>
 #include <MQTTClient.h>
@@ -13,7 +13,8 @@
 
 #define BUTTON_PIN 22
 #define MATRIX_PIN 23
-#define POT_PIN 36
+#define POT_A_PIN 12
+#define POT_B_PIN 13
 
 // The MQTT topics that this device should publish/subscribe
 #define AWS_IOT_PUBLISH_TOPIC   "esp32/pub"
@@ -28,11 +29,12 @@ MQTTClient client = MQTTClient(256);
 Adafruit_NeoMatrix matrix = Adafruit_NeoMatrix(8, 8, MATRIX_PIN,
   NEO_MATRIX_TOP     + NEO_MATRIX_RIGHT +
   NEO_MATRIX_COLUMNS + NEO_MATRIX_PROGRESSIVE,
-  NEO_RGB            + NEO_KHZ800);
+  NEO_GRB            + NEO_KHZ800);
 
 ESP32Encoder encoder;
 long oldEncoderCount = 0;
 
+const uint8_t MAX_BRIGHTNESS = 125;
 uint8_t brightness = 0;
 uint16_t defaultColor = matrix.Color(255, 255, 255);
 uint inBlink = 0;
@@ -61,32 +63,33 @@ void blink(int id)
 			break;   
 	}
 	
-	for (int i = 0; i <= 255; i+=10)
+	for (int i = 0; i <= MAX_BRIGHTNESS; i+=10)
 	{
-		matrix.fill(color);
+		matrix.fillScreen(color);
 		matrix.setBrightness(i);
 		matrix.show();
 		delay(2);
 	}
 
-	for (int i = 255; i >= 0; i--)
+	for (int i = MAX_BRIGHTNESS; i >= 0; i--)
 	{
-		matrix.fill(color);
+		matrix.fillScreen(color);
 		matrix.setBrightness(i);
 		matrix.show();
-		delay(4);
+		delay(10);
 	}
 
 	matrix.setBrightness(brightness);
-	matrix.fill(defaultColor);
+	matrix.fillScreen(defaultColor);
 	matrix.show();
 
 	inBlink--;
+	Serial.println("Blink performed");
 }
 
 void connectWiFi()
 {
-	wiFiManager.autoConnect("AutoConnectAP", "roosterChicken");
+	wiFiManager.autoConnect("LightBoxAccessPoint", "merryChristmas");
 	wiFiManager.setWiFiAutoReconnect(true);
 	Serial.println("Connected to " + wiFiManager.getWiFiSSID());
 
@@ -143,33 +146,40 @@ void publishMessage()
   	StaticJsonDocument<200> doc;
   	doc["time"] = millis();
 	doc["id"] = ID;
-	doc["color"] = COLOR;
   	char jsonBuffer[512];
   	serializeJson(doc, jsonBuffer); // print to client
 
   	client.publish(AWS_IOT_PUBLISH_TOPIC, jsonBuffer);
+
+	Serial.println("Published message");
 }
 
 void setup() {
   	Serial.begin(9600);
 	delay(10);
 
-	preferences.begin("light-box", false);
-	brightness = preferences.getLong("brightness", 1);
-	preferences.end();
+	matrix.begin();
+	matrix.fillScreen(matrix.Color(0, 0, 0));
+	matrix.show();
 
 	connectWiFi();
   	connectAWS();
 
 	pinMode(BUTTON_PIN, INPUT_PULLUP);
+
 	ESP32Encoder::useInternalWeakPullResistors=UP;
-	encoder.attachHalfQuad(12, 13);
+	encoder.attachHalfQuad(POT_A_PIN, POT_B_PIN);
 	oldEncoderCount = encoder.getCount();
 
-	matrix.begin();
+	preferences.begin("light-box", false);
+	brightness = preferences.getLong("brightness", 1);
+	preferences.end();
+
 	matrix.setBrightness(brightness);
-	matrix.fill(defaultColor);
+	matrix.fillScreen(defaultColor);
 	matrix.show();
+
+	Serial.println("Setup complete");
 }
 
 void loop() {
@@ -191,7 +201,7 @@ void loop() {
 		long encoderCount = encoder.getCount();
 		boolean brightnessChanged = false;
 
-		if (encoderCount > oldEncoderCount && brightness < 255)
+		if (encoderCount > oldEncoderCount && brightness < MAX_BRIGHTNESS)
 		{
 			brightness++;
 			brightnessChanged = true;
@@ -210,7 +220,7 @@ void loop() {
 			preferences.putLong("brightness", brightness);
 			preferences.end();
 			matrix.setBrightness(brightness);
-			matrix.fill(defaultColor);
+			matrix.fillScreen(defaultColor);
 			matrix.show();
 		}
 	}
