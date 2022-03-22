@@ -1,4 +1,4 @@
-#include "secrets1.h"
+#include "secrets-wesley.h"
 #include <Arduino.h>
 #include <WiFiClientSecure.h>
 #include <MQTTClient.h>
@@ -17,8 +17,36 @@
 #define POT_B_PIN 13
 
 // The MQTT topics that this device should publish/subscribe
-#define AWS_IOT_PUBLISH_TOPIC   "esp32/pub"
-#define AWS_IOT_SUBSCRIBE_TOPIC "esp32/sub"
+#define AWS_IOT_PUBLISH_TOPIC   "light-box/pub"
+#define AWS_IOT_SUBSCRIBE_TOPIC "light-box/sub"
+
+// Amazon Root CA
+static const char AWS_CERT_CA[] PROGMEM = R"EOF(
+-----BEGIN CERTIFICATE-----
+MIIDQTCCAimgAwIBAgITBmyfz5m/jAo54vB4ikPmljZbyjANBgkqhkiG9w0BAQsF
+ADA5MQswCQYDVQQGEwJVUzEPMA0GA1UEChMGQW1hem9uMRkwFwYDVQQDExBBbWF6
+b24gUm9vdCBDQSAxMB4XDTE1MDUyNjAwMDAwMFoXDTM4MDExNzAwMDAwMFowOTEL
+MAkGA1UEBhMCVVMxDzANBgNVBAoTBkFtYXpvbjEZMBcGA1UEAxMQQW1hem9uIFJv
+b3QgQ0EgMTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBALJ4gHHKeNXj
+ca9HgFB0fW7Y14h29Jlo91ghYPl0hAEvrAIthtOgQ3pOsqTQNroBvo3bSMgHFzZM
+9O6II8c+6zf1tRn4SWiw3te5djgdYZ6k/oI2peVKVuRF4fn9tBb6dNqcmzU5L/qw
+IFAGbHrQgLKm+a/sRxmPUDgH3KKHOVj4utWp+UhnMJbulHheb4mjUcAwhmahRWa6
+VOujw5H5SNz/0egwLX0tdHA114gk957EWW67c4cX8jJGKLhD+rcdqsq08p8kDi1L
+93FcXmn/6pUCyziKrlA4b9v7LWIbxcceVOF34GfID5yHI9Y/QCB/IIDEgEw+OyQm
+jgSubJrIqg0CAwEAAaNCMEAwDwYDVR0TAQH/BAUwAwEB/zAOBgNVHQ8BAf8EBAMC
+AYYwHQYDVR0OBBYEFIQYzIU07LwMlJQuCFmcx7IQTgoIMA0GCSqGSIb3DQEBCwUA
+A4IBAQCY8jdaQZChGsV2USggNiMOruYou6r4lK5IpDB/G/wkjUu0yKGX9rbxenDI
+U5PMCCjjmCXPI6T53iHTfIUJrU6adTrCC2qJeHZERxhlbI1Bjjt/msv0tadQ1wUs
+N+gDS63pYaACbvXy8MWy7Vu33PqUXHeeE6V/Uq2V8viTO96LXFvKWlJbYK8U90vv
+o/ufQJVtMVT8QtPHRh8jrdkPSHCa2XV4cdFyQzR1bldZwgJcJmApzyMZFo6IQ6XU
+5MsI+yMRQ+hDKXJioaldXgjUkK642M4UwtBV8ob2xJNDd2ZhwLnoQdeXeGADbkpy
+rqXRfboQnoZsG4q5WTP468SQvvG5
+-----END CERTIFICATE-----
+)EOF";
+
+const char WIFI_SSID[] = "DucksBeakTheBears";
+const char WIFI_PASSWORD[] = "ChampKlein90";
+const char AWS_IOT_ENDPOINT[] = "a23wplj2ed83c6-ats.iot.us-west-2.amazonaws.com";
 
 Preferences preferences;
 
@@ -37,31 +65,12 @@ long oldEncoderCount = 0;
 const uint8_t MAX_BRIGHTNESS = 125;
 uint8_t brightness = 0;
 uint16_t defaultColor = matrix.Color(255, 255, 255);
-uint inBlink = 0;
 
-void blink(int id)
+// === Light methods ===
+
+void blink(int red, int blue, int green)
 {
-	inBlink++;
-
-	uint16_t color = 0;
-	switch (id)
-	{
-		case 1:
-			color = matrix.Color(0, 0, 255);
-			break;
-		case 2:
-			color = matrix.Color(255, 255, 0);
-			break;
-		case 3:
-			color = matrix.Color(0, 255, 0);
-			break;
-		case 4:
-			color = matrix.Color(255, 0, 0);
-			break;
-		default:
-			color = matrix.Color(255, 255, 255);
-			break;   
-	}
+	uint16_t color = matrix.Color(red, green, blue);
 	
 	for (int i = 0; i <= MAX_BRIGHTNESS; i+=10)
 	{
@@ -83,9 +92,39 @@ void blink(int id)
 	matrix.fillScreen(defaultColor);
 	matrix.show();
 
-	inBlink--;
 	Serial.println("Blink performed");
 }
+
+void handleBrightness() 
+{
+	long encoderCount = encoder.getCount();
+	boolean brightnessChanged = false;
+
+	if (encoderCount > oldEncoderCount && brightness < MAX_BRIGHTNESS)
+	{
+		brightness++;
+		brightnessChanged = true;
+	}
+	else if (encoderCount < oldEncoderCount && brightness > 0)
+	{
+		brightness--;
+		brightnessChanged = true;
+	}
+
+	oldEncoderCount = encoderCount;
+
+	if (brightnessChanged)
+	{
+		preferences.begin("light-box", false);
+		preferences.putLong("brightness", brightness);
+		preferences.end();
+		matrix.setBrightness(brightness);
+		matrix.fillScreen(defaultColor);
+		matrix.show();
+	}
+}
+
+// === WiFi methods ===
 
 void connectWiFi()
 {
@@ -100,21 +139,7 @@ void connectWiFi()
 	Serial.println("AWS IoT device credentials added");
 }
 
-void messageHandler(String &topic, String &payload) {
-  	Serial.println("incoming: " + topic + " - " + payload);
-
-	StaticJsonDocument<200> doc;
-	deserializeJson(doc, payload);
-
-	if (doc.containsKey("id"))
-	{
-		int id = doc["id"];
-		if (id != ID)
-		{
-			blink(id);
-		}
-	}
-}
+// === AWS methods ===
 
 void connectAWS()
 {
@@ -141,11 +166,33 @@ void connectAWS()
   	Serial.println("Connected");
 }
 
+void messageHandler(String &topic, String &payload) {
+  	Serial.println("incoming: " + topic + " - " + payload);
+
+	StaticJsonDocument<200> doc;
+	deserializeJson(doc, payload);
+
+	if (doc.containsKey("id"))
+	{
+		int id = doc["id"];
+		if (id != ID)
+		{
+			int red = doc["red"];
+			int blue = doc["blue"];
+			int green = doc["green"];
+			blink(red, blue, green);
+		}
+	}
+}
+
 void publishMessage()
 {
   	StaticJsonDocument<200> doc;
   	doc["time"] = millis();
 	doc["id"] = ID;
+	doc["red"] = RED;
+	doc["blue"] = BLUE;
+	doc["green"] = GREEN;
   	char jsonBuffer[512];
   	serializeJson(doc, jsonBuffer); // print to client
 
@@ -153,6 +200,8 @@ void publishMessage()
 
 	Serial.println("Published message");
 }
+
+// === Core methods ===
 
 void setup() {
   	Serial.begin(9600);
@@ -191,37 +240,9 @@ void loop() {
 	int buttonState = digitalRead(BUTTON_PIN);
 	if (buttonState == LOW) {
 		publishMessage();
-		blink(ID);
+		blink(RED, BLUE, GREEN);
 	}
 
   	client.loop();
-	
-	if (inBlink == 0) 
-	{
-		long encoderCount = encoder.getCount();
-		boolean brightnessChanged = false;
-
-		if (encoderCount > oldEncoderCount && brightness < MAX_BRIGHTNESS)
-		{
-			brightness++;
-			brightnessChanged = true;
-		}
-		else if (encoderCount < oldEncoderCount && brightness > 0)
-		{
-			brightness--;
-			brightnessChanged = true;
-		}
-
-		oldEncoderCount = encoderCount;
-
-		if (brightnessChanged)
-		{
-			preferences.begin("light-box", false);
-			preferences.putLong("brightness", brightness);
-			preferences.end();
-			matrix.setBrightness(brightness);
-			matrix.fillScreen(defaultColor);
-			matrix.show();
-		}
-	}
+	handleBrightness();	
 }
