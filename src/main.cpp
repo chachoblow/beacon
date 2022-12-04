@@ -1,4 +1,4 @@
-#include "secrets-wesley.h"
+#include "beacon-barry-secrets.h"
 #include <Arduino.h>
 #include <WiFiClientSecure.h>
 #include <MQTTClient.h>
@@ -16,12 +16,8 @@
 #define POT_A_PIN 12
 #define POT_B_PIN 13
 
-// The MQTT topics that this device should publish/subscribe
-#define AWS_IOT_PUBLISH_TOPIC "light-box/pub"
-#define AWS_IOT_SUBSCRIBE_TOPIC "light-box/sub"
-
 // Amazon Root CA
-static const char AWS_CERT_CA[] PROGMEM = R"EOF(
+static const char AWS_ROOT_CA_CERT[] PROGMEM = R"EOF(
 -----BEGIN CERTIFICATE-----
 MIIDQTCCAimgAwIBAgITBmyfz5m/jAo54vB4ikPmljZbyjANBgkqhkiG9w0BAQsF
 ADA5MQswCQYDVQQGEwJVUzEPMA0GA1UEChMGQW1hem9uMRkwFwYDVQQDExBBbWF6
@@ -44,8 +40,6 @@ rqXRfboQnoZsG4q5WTP468SQvvG5
 -----END CERTIFICATE-----
 )EOF";
 
-const char WIFI_SSID[] = "DucksBeakTheBears";
-const char WIFI_PASSWORD[] = "ChampKlein90";
 const char AWS_IOT_ENDPOINT[] = "a23wplj2ed83c6-ats.iot.us-west-2.amazonaws.com";
 
 Preferences preferences;
@@ -128,14 +122,14 @@ void handleBrightness()
 
 void connectWiFi()
 {
-	wiFiManager.autoConnect("BeaconAccessPoint", "merryChristmas");
+	wiFiManager.autoConnect("BeaconAccessPoint", "MerryChristmasYaFilthyAnimal");
 	wiFiManager.setWiFiAutoReconnect(true);
 	Serial.println("Connected to " + wiFiManager.getWiFiSSID());
 
 	// Configure WiFiClientSecure to use the AWS IoT device credentials
-	net.setCACert(AWS_CERT_CA);
-	net.setCertificate(AWS_CERT_CRT);
-	net.setPrivateKey(AWS_CERT_PRIVATE);
+	net.setCACert(AWS_ROOT_CA_CERT);
+	net.setCertificate(AWS_DEVICE_CERT);
+	net.setPrivateKey(AWS_PRIVATE_KEY);
 	Serial.println("AWS IoT device credentials added");
 }
 
@@ -150,8 +144,8 @@ void messageHandler(String &topic, String &payload)
 
 	if (doc.containsKey("id"))
 	{
-		int id = doc["id"];
-		if (id != ID)
+		const char *id = doc["id"];
+		if (strcmp(id, ID) != 0)
 		{
 			int red = doc["red"];
 			int blue = doc["blue"];
@@ -183,8 +177,12 @@ void connectAWS()
 		return;
 	}
 
-	// Subscribe to a topic
-	client.subscribe(AWS_IOT_SUBSCRIBE_TOPIC);
+	for (auto topic : AWS_IOT_SUBSCRIBE_TOPICS)
+	{
+		Serial.println(topic);
+		client.subscribe(topic);
+	}
+
 	Serial.println("Connected");
 }
 
@@ -199,7 +197,11 @@ void publishMessage()
 	char jsonBuffer[512];
 	serializeJson(doc, jsonBuffer); // print to client
 
-	client.publish(AWS_IOT_PUBLISH_TOPIC, jsonBuffer);
+	for (auto topic : AWS_IOT_PUBLISH_TOPICS)
+	{
+		Serial.println(topic);
+		client.publish(topic, jsonBuffer);
+	}
 
 	Serial.println("Published message");
 }
