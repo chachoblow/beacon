@@ -17,7 +17,7 @@
 #define POT_B_PIN 13
 
 // The MQTT topics that this device should publish/subscribe
-#define AWS_IOT_PUBLISH_TOPIC   "light-box/pub"
+#define AWS_IOT_PUBLISH_TOPIC "light-box/pub"
 #define AWS_IOT_SUBSCRIBE_TOPIC "light-box/sub"
 
 // Amazon Root CA
@@ -55,9 +55,9 @@ WiFiClientSecure net = WiFiClientSecure();
 MQTTClient client = MQTTClient(256);
 
 Adafruit_NeoMatrix matrix = Adafruit_NeoMatrix(8, 8, MATRIX_PIN,
-  NEO_MATRIX_TOP     + NEO_MATRIX_RIGHT +
-  NEO_MATRIX_COLUMNS + NEO_MATRIX_PROGRESSIVE,
-  NEO_GRB            + NEO_KHZ800);
+											   NEO_MATRIX_TOP + NEO_MATRIX_RIGHT +
+												   NEO_MATRIX_COLUMNS + NEO_MATRIX_PROGRESSIVE,
+											   NEO_GRB + NEO_KHZ800);
 
 ESP32Encoder encoder;
 long oldEncoderCount = 0;
@@ -71,8 +71,8 @@ uint16_t defaultColor = matrix.Color(255, 255, 255);
 void blink(int red, int blue, int green)
 {
 	uint16_t color = matrix.Color(red, green, blue);
-	
-	for (int i = 0; i <= MAX_BRIGHTNESS; i+=10)
+
+	for (int i = 0; i <= MAX_BRIGHTNESS; i += 10)
 	{
 		matrix.fillScreen(color);
 		matrix.setBrightness(i);
@@ -95,7 +95,7 @@ void blink(int red, int blue, int green)
 	Serial.println("Blink performed");
 }
 
-void handleBrightness() 
+void handleBrightness()
 {
 	long encoderCount = encoder.getCount();
 	boolean brightnessChanged = false;
@@ -132,42 +132,18 @@ void connectWiFi()
 	wiFiManager.setWiFiAutoReconnect(true);
 	Serial.println("Connected to " + wiFiManager.getWiFiSSID());
 
-  	// Configure WiFiClientSecure to use the AWS IoT device credentials
-  	net.setCACert(AWS_CERT_CA);
-  	net.setCertificate(AWS_CERT_CRT);
-  	net.setPrivateKey(AWS_CERT_PRIVATE);
+	// Configure WiFiClientSecure to use the AWS IoT device credentials
+	net.setCACert(AWS_CERT_CA);
+	net.setCertificate(AWS_CERT_CRT);
+	net.setPrivateKey(AWS_CERT_PRIVATE);
 	Serial.println("AWS IoT device credentials added");
 }
 
 // === AWS methods ===
 
-void connectAWS()
+void messageHandler(String &topic, String &payload)
 {
-  	// Connect to the MQTT broker on the AWS endpoint we defined earlier
-  	client.begin(AWS_IOT_ENDPOINT, 8883, net);
-
-  	// Create a message handler
-  	client.onMessage(messageHandler);
-
-  	Serial.print("Connecting to AWS IOT");
-  	while (!client.connect(THINGNAME)) {
-    	Serial.print(".");
-    	delay(100);
-  	}
-	Serial.println();
-
-  	if (!client.connected()){
-    	Serial.println("AWS IoT Timeout!");
-    	return;
-  	}
-
-  	// Subscribe to a topic
-  	client.subscribe(AWS_IOT_SUBSCRIBE_TOPIC);
-  	Serial.println("Connected");
-}
-
-void messageHandler(String &topic, String &payload) {
-  	Serial.println("incoming: " + topic + " - " + payload);
+	Serial.println("incoming: " + topic + " - " + payload);
 
 	StaticJsonDocument<200> doc;
 	deserializeJson(doc, payload);
@@ -185,26 +161,54 @@ void messageHandler(String &topic, String &payload) {
 	}
 }
 
+void connectAWS()
+{
+	// Connect to the MQTT broker on the AWS endpoint we defined earlier
+	client.begin(AWS_IOT_ENDPOINT, 8883, net);
+
+	// Create a message handler
+	client.onMessage(messageHandler);
+
+	Serial.print("Connecting to AWS IOT");
+	while (!client.connect(THINGNAME))
+	{
+		Serial.print(".");
+		delay(100);
+	}
+	Serial.println();
+
+	if (!client.connected())
+	{
+		Serial.println("AWS IoT Timeout!");
+		return;
+	}
+
+	// Subscribe to a topic
+	client.subscribe(AWS_IOT_SUBSCRIBE_TOPIC);
+	Serial.println("Connected");
+}
+
 void publishMessage()
 {
-  	StaticJsonDocument<200> doc;
-  	doc["time"] = millis();
+	StaticJsonDocument<200> doc;
+	doc["time"] = millis();
 	doc["id"] = ID;
 	doc["red"] = RED;
 	doc["blue"] = BLUE;
 	doc["green"] = GREEN;
-  	char jsonBuffer[512];
-  	serializeJson(doc, jsonBuffer); // print to client
+	char jsonBuffer[512];
+	serializeJson(doc, jsonBuffer); // print to client
 
-  	client.publish(AWS_IOT_PUBLISH_TOPIC, jsonBuffer);
+	client.publish(AWS_IOT_PUBLISH_TOPIC, jsonBuffer);
 
 	Serial.println("Published message");
 }
 
 // === Core methods ===
 
-void setup() {
-  	Serial.begin(9600);
+void setup()
+{
+	Serial.begin(9600);
 	delay(10);
 
 	matrix.begin();
@@ -212,11 +216,11 @@ void setup() {
 	matrix.show();
 
 	connectWiFi();
-  	connectAWS();
+	connectAWS();
 
 	pinMode(BUTTON_PIN, INPUT_PULLUP);
 
-	ESP32Encoder::useInternalWeakPullResistors=UP;
+	ESP32Encoder::useInternalWeakPullResistors = UP;
 	encoder.attachHalfQuad(POT_A_PIN, POT_B_PIN);
 	oldEncoderCount = encoder.getCount();
 
@@ -231,18 +235,21 @@ void setup() {
 	Serial.println("Setup complete");
 }
 
-void loop() {
-  	if (!client.connected()){
+void loop()
+{
+	if (!client.connected())
+	{
 		Serial.println("AWS IOT disconnected");
-    	connectAWS();
-  	}
+		connectAWS();
+	}
 
 	int buttonState = digitalRead(BUTTON_PIN);
-	if (buttonState == LOW) {
+	if (buttonState == LOW)
+	{
 		publishMessage();
 		blink(RED, BLUE, GREEN);
 	}
 
-  	client.loop();
-	handleBrightness();	
+	client.loop();
+	handleBrightness();
 }
