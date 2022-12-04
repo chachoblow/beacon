@@ -115,7 +115,7 @@ void handleBrightness()
 
 	if (brightnessChanged)
 	{
-		preferences.begin("light-box", false);
+		preferences.begin("beacon");
 		preferences.putLong("brightness", brightness);
 		preferences.end();
 		matrix.setBrightness(brightness);
@@ -128,7 +128,7 @@ void handleBrightness()
 
 void connectWiFi()
 {
-	wiFiManager.autoConnect("LightBoxAccessPoint", "merryChristmas");
+	wiFiManager.autoConnect("BeaconAccessPoint", "merryChristmas");
 	wiFiManager.setWiFiAutoReconnect(true);
 	Serial.println("Connected to " + wiFiManager.getWiFiSSID());
 
@@ -224,7 +224,7 @@ void setup()
 	encoder.attachHalfQuad(POT_A_PIN, POT_B_PIN);
 	oldEncoderCount = encoder.getCount();
 
-	preferences.begin("light-box", false);
+	preferences.begin("beacon");
 	brightness = preferences.getLong("brightness", 1);
 	preferences.end();
 
