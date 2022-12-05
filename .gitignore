@@ -3,9 +3,4 @@
 .vscode/c_cpp_properties.json
 .vscode/launch.json
 .vscode/ipch
-.include/beacon-barry-secrets.h
-.include/beacon-brynn-secrets.h
-.include/beacon-malia-secrets.h
-.include/beacon-megan-secrets.h
-.include/beacon-robby-secrets.h
-.include/beacon-wesley-secrets.h
+include/beacon-*-secrets.h
